@@ -30,6 +30,8 @@
             margin: 10px 0;
             padding: 10px;
             border-radius: 5px;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
         .user-message {
             background: #e3f2fd;
@@ -42,7 +44,6 @@
         .input-area {
             display: flex;
             gap: 10px;
-            margin-bottom: 10px;
         }
         input {
             flex: 1;
@@ -60,40 +61,27 @@
         }
         .finish-btn {
             background: #4CAF50;
+            margin-top: 10px;
         }
-        .export-btn {
+        .copy-btn {
             background: #FF9800;
-        }
-        .admin-panel {
-            background: #f8f9fa;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            margin-top: 15px;
-        }
-        .hidden {
-            display: none;
-        }
-        .admin-key {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            background: rgba(0,0,0,0.1);
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            color: #666;
+            margin-top: 10px;
         }
         .loading {
             color: #666;
             font-style: italic;
+        }
+        #copyNotice {
+            display: none;
+            color: green;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
     <div class="chat-container">
         <h2>AI助手</h2>
-        <p>请与AI助手对话，完成后点击"结束对话"返回问卷</p>
+        <p>请与AI助手对话，完成后请点击“复制全部对话”，并将内容粘贴到问卷页面。</p>
         
         <div class="messages" id="messages">
             <div class="message ai-message">
@@ -105,30 +93,15 @@
             <input type="text" id="userInput" placeholder="请输入您的问题..." onkeypress="handleKeyPress(event)">
             <button onclick="sendMessage()">发送</button>
         </div>
-        
+
+        <!-- 新增：一键复制按钮 -->
+        <button class="copy-btn" onclick="copyChat()">复制全部对话</button>
+        <p id="copyNotice">✅ 已复制！请返回问卷并粘贴在指定文本框中。</p>
+
         <button class="finish-btn" onclick="finishChat()">结束对话并返回问卷</button>
-        
-        <!-- 管理员面板 -->
-        <div class="admin-panel hidden" id="adminPanel">
-            <h3>📊 对话记录管理</h3>
-            <p>当前已记录 <span id="recordCount">0</span> 条对话</p>
-            <button class="export-btn" onclick="exportConversations()">导出所有对话记录(CSV)</button>
-            <button class="export-btn" onclick="clearConversations()">清空记录</button>
-            <div id="exportResult"></div>
-        </div>
     </div>
 
-    <!-- 管理员快捷键提示 -->
-    <div class="admin-key hidden" id="adminKeyHint">按 F2 显示/隐藏管理面板</div>
-
     <script>
-        // 配置信息
-        const API_KEY = 'sk-8c93bd024f66443f8159d0831583dccc'; // 替换为您的API密钥
-        
-        // 生成用户ID和会话ID
-        const userId = 'user_' + Math.random().toString(36).substr(2, 9);
-        const sessionId = 'session_' + Date.now();
-        let turnCount = 0;
         let conversationHistory = [
             {
                 role: 'system',
@@ -136,38 +109,8 @@
             }
         ];
 
-        // 显示/隐藏管理员面板 - 使用F2键
-        document.addEventListener('keydown', function(e) {
-            // F2键的keyCode是113
-            if (e.key === 'F2' || e.keyCode === 113) {
-                e.preventDefault(); // 阻止浏览器默认行为
-                const adminPanel = document.getElementById('adminPanel');
-                const adminKeyHint = document.getElementById('adminKeyHint');
-                
-                adminPanel.classList.toggle('hidden');
-                adminKeyHint.classList.toggle('hidden');
-                
-                if (!adminPanel.classList.contains('hidden')) {
-                    updateRecordCount();
-                }
-            }
-        });
-
-        // 备选方案：使用Ctrl+Shift+A
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.shiftKey && e.key === 'A') {
-                e.preventDefault();
-                const adminPanel = document.getElementById('adminPanel');
-                const adminKeyHint = document.getElementById('adminKeyHint');
-                
-                adminPanel.classList.toggle('hidden');
-                adminKeyHint.classList.toggle('hidden');
-                
-                if (!adminPanel.classList.contains('hidden')) {
-                    updateRecordCount();
-                }
-            }
-        });
+        // 从URL中提取被试编号（如果有）
+        const pid = new URLSearchParams(window.location.search).get('pid') || 'unknown';
 
         function handleKeyPress(event) {
             if (event.key === 'Enter') {
@@ -175,104 +118,19 @@
             }
         }
 
-        // 保存对话到本地存储
-        function saveConversation(userMessage, aiResponse) {
-            const conversation = {
-                timestamp: new Date().toISOString(),
-                sessionId: sessionId,
-                userId: userId,
-                userMessage: userMessage,
-                aiResponse: aiResponse,
-                turnCount: turnCount
-            };
-            
-            // 从本地存储获取现有记录
-            let allConversations = JSON.parse(localStorage.getItem('ai_conversations') || '[]');
-            
-            // 添加新记录
-            allConversations.push(conversation);
-            
-            // 保存回本地存储
-            localStorage.setItem('ai_conversations', JSON.stringify(allConversations));
-            
-            console.log('对话已保存:', conversation);
-        }
-
-        // 更新记录计数显示
-        function updateRecordCount() {
-            const allConversations = JSON.parse(localStorage.getItem('ai_conversations') || '[]');
-            document.getElementById('recordCount').textContent = allConversations.length;
-        }
-
-        // 导出对话记录为CSV
-        function exportConversations() {
-            const allConversations = JSON.parse(localStorage.getItem('ai_conversations') || '[]');
-            
-            if (allConversations.length === 0) {
-                document.getElementById('exportResult').innerHTML = '<p style="color: red;">没有可导出的对话记录</p>';
-                return;
-            }
-            
-            // 创建CSV内容
-            let csvContent = "时间戳,会话ID,用户ID,对话轮次,用户消息,AI回复\n";
-            
-            allConversations.forEach(conv => {
-                const row = [
-                    conv.timestamp,
-                    conv.sessionId,
-                    conv.userId,
-                    conv.turnCount,
-                    '"' + (conv.userMessage || '').replace(/"/g, '""') + '"',
-                    '"' + (conv.aiResponse || '').replace(/"/g, '""') + '"'
-                ].join(',');
-                csvContent += row + '\n';
-            });
-            
-            // 创建下载链接
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            const timestamp = new Date().toISOString().split('T')[0];
-            
-            link.setAttribute('href', url);
-            link.setAttribute('download', `ai对话记录_${timestamp}.csv`);
-            link.style.visibility = 'hidden';
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            document.getElementById('exportResult').innerHTML = `<p style="color: green;">成功导出 ${allConversations.length} 条记录</p>`;
-        }
-
-        // 清空对话记录
-        function clearConversations() {
-            if (confirm('确定要清空所有对话记录吗？此操作不可撤销！')) {
-                localStorage.removeItem('ai_conversations');
-                updateRecordCount();
-                document.getElementById('exportResult').innerHTML = '<p style="color: orange;">所有记录已清空</p>';
-            }
-        }
-
         async function sendMessage() {
             const userInput = document.getElementById('userInput');
             const message = userInput.value.trim();
-            
             if (!message) return;
             
-            // 添加用户消息到界面
             addMessage(message, 'user');
             userInput.value = '';
             
-            // 添加用户消息到历史记录
             conversationHistory.push({
                 role: 'user',
                 content: message
             });
             
-            turnCount++;
-            
-            // 显示加载中
             const loadingId = addMessage('AI正在思考中...', 'ai', true);
             
             try {
@@ -280,7 +138,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + API_KEY
+                        'Authorization': 'Bearer ' + 'sk-8c93bd024f66443f8159d0831583dccc' // 替换成你的真实API密钥
                     },
                     body: JSON.stringify({
                         model: 'deepseek-chat',
@@ -295,11 +153,8 @@
                 }
                 
                 const data = await response.json();
-                
-                // 移除加载消息
                 removeMessage(loadingId);
                 
-                // 添加AI回复到界面和历史记录
                 if (data.choices && data.choices[0]) {
                     const aiResponse = data.choices[0].message.content;
                     addMessage(aiResponse, 'ai');
@@ -307,25 +162,25 @@
                         role: 'assistant',
                         content: aiResponse
                     });
-                    
-                    // 保存对话记录
-                    saveConversation(message, aiResponse);
-                    updateRecordCount();
                 } else {
                     const errorMsg = '抱歉，我暂时无法回复，请稍后再试。';
                     addMessage(errorMsg, 'ai');
-                    saveConversation(message, errorMsg);
-                    updateRecordCount();
+                    conversationHistory.push({
+                        role: 'assistant',
+                        content: errorMsg
+                    });
                 }
             } catch (error) {
                 removeMessage(loadingId);
                 const errorMsg = '网络连接出现问题，请检查网络后重试。';
                 addMessage(errorMsg, 'ai');
-                saveConversation(message, errorMsg);
-                updateRecordCount();
+                conversationHistory.push({
+                    role: 'assistant',
+                    content: errorMsg
+                });
             }
         }
-        
+
         function addMessage(content, type, isTemp = false) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
@@ -333,40 +188,52 @@
             
             messageDiv.className = `message ${type}-message`;
             messageDiv.textContent = content;
-            if (messageId) {
-                messageDiv.id = messageId;
-            }
+            if (messageId) messageDiv.id = messageId;
             
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
             
             return messageId;
         }
-        
+
         function removeMessage(id) {
             const element = document.getElementById(id);
-            if (element) {
-                element.remove();
-            }
-        }
-        
-        function finishChat() {
-            // 记录对话结束
-            console.log('用户对话结束，用户ID:', userId, '会话ID:', sessionId, '对话轮次:', turnCount);
-            
-            // 提示用户
-            alert('对话已结束，即将返回问卷页面');
-            
-            // 返回问卷页面
-            if (document.referrer) {
-                window.history.back();
-            } else {
-                window.close();
-            }
+            if (element) element.remove();
         }
 
-        // 初始化
-        updateRecordCount();
+        // ✅ 一键复制功能
+        function copyChat() {
+            const messagesDiv = document.getElementById('messages');
+            const messages = messagesDiv.querySelectorAll('.message');
+            
+            let chatText = `被试编号: ${pid}\n\n`;
+            messages.forEach(msg => {
+                if (msg.classList.contains('user-message')) {
+                    chatText += `用户: ${msg.textContent.trim()}\n`;
+                } else if (msg.classList.contains('ai-message')) {
+                    chatText += `AI: ${msg.textContent.trim()}\n`;
+                }
+            });
+
+            navigator.clipboard.writeText(chatText).then(() => {
+                document.getElementById('copyNotice').style.display = 'block';
+            }).catch(err => {
+                alert('复制失败，请手动选中并复制。');
+                console.error(err);
+            });
+        }
+
+        function finishChat() {
+            const endTime = new Date().toISOString();
+            console.log('对话结束时间:', endTime);
+            alert('对话已结束，请确认已复制对话内容，然后返回问卷页面。');
+
+            if (document.referrer && document.referrer.includes('您的问卷域名')) {
+                window.location.href = document.referrer;
+            } else {
+                window.close(); // 或跳转到指定问卷URL
+            }
+        }
     </script>
 </body>
 </html>
