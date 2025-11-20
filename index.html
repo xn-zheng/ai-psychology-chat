@@ -51,13 +51,22 @@
             display: flex;
             gap: 10px;
             margin-bottom: 8px;
+            /* 确保对齐 */
+            align-items: flex-end; 
         }
-        input[type="text"] {
+
+        /* 关键修改：将 input 样式应用于 textarea */
+        textarea {
             flex: 1;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
+            resize: none; /* 禁用用户手动调整大小 */
+            min-height: 40px; /* 初始高度，保持和按钮对齐 */
+            overflow-y: hidden; /* 默认隐藏滚动条，由 JS 控制高度 */
+            line-height: 1.5; /* 设置行高，让内容看起来更舒服 */
         }
+
         button {
             padding: 10px 16px;
             background: #2196F3;
@@ -65,6 +74,10 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            /* 保证按钮高度与 textarea 的最小高度对齐 */
+            height: 40px; 
+            box-sizing: border-box; 
+            line-height: 20px; /* 调整行高使文字居中 */
         }
         button:active { transform: translateY(1px); }
         .bottom-actions {
@@ -107,7 +120,7 @@
         </div>
         
         <div class="input-area">
-            <input type="text" id="userInput" placeholder="请输入您的问题..." onkeypress="handleKeyPress(event)" aria-label="输入您的问题">
+            <textarea id="userInput" placeholder="请输入您的问题..." rows="1" aria-label="输入您的问题"></textarea>
             <button onclick="sendMessage()">发送</button>
         </div>
 
@@ -127,8 +140,12 @@
             }
         ];
 
-        // 把页面中初始的 AI 欢迎语也记入 conversationHistory（保证复制时包含欢迎语）
+        // 获取 DOM 元素
+        const userInput = document.getElementById('userInput');
+        const messagesDiv = document.getElementById('messages');
         const initialAiText = document.getElementById('initial-ai').textContent.trim();
+
+        // 把页面中初始的 AI 欢迎语也记入 conversationHistory（保证复制时包含欢迎语）
         conversationHistory.push({ role: 'assistant', content: initialAiText });
 
         // 从URL中提取被试编号（如果有）
@@ -137,14 +154,46 @@
         // 标记是否已复制（用于阻止未复制就退出）
         let hasCopied = false;
 
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
+        // =========================================================
+        // 新增功能 1: 自动调整 textarea 高度的函数
+        // =========================================================
+        function autoResize() {
+            // 重置高度为 1 行，以便准确计算新的scrollHeight
+            userInput.style.height = 'auto'; 
+            
+            // 计算新的高度，不超过最大高度（例如 200px，防止无限大）
+            const newHeight = Math.min(userInput.scrollHeight, 200); 
+            
+            // 应用新高度
+            userInput.style.height = newHeight + 'px';
+
+            // 调整发送按钮的 margin-top 确保垂直对齐（可选，如果 CSS 布局未完全解决）
+            // const sendButton = userInput.nextElementSibling;
+            // if (sendButton) {
+            //     sendButton.style.marginTop = (userInput.offsetHeight - sendButton.offsetHeight) / 2 + 'px';
+            // }
         }
 
+        // =========================================================
+        // 新增功能 2: 监听输入事件和回车事件
+        // =========================================================
+        userInput.addEventListener('input', autoResize); // 监听输入事件，实时调整高度
+
+        userInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) { // 按 Enter 键发送，按 Shift+Enter 换行
+                event.preventDefault(); // 阻止默认的 Enter 行为（换行）
+                sendMessage();
+            }
+        });
+        
+        // 确保页面加载时输入框的初始高度正确
+        window.addEventListener('load', autoResize); 
+
+
+        // =========================================================
+        // 原有功能 - 发送消息
+        // =========================================================
         async function sendMessage() {
-            const userInput = document.getElementById('userInput');
             const message = userInput.value.trim();
             if (!message) return;
 
@@ -152,6 +201,9 @@
             addMessage(message, 'user');
             conversationHistory.push({ role: 'user', content: message });
             userInput.value = '';
+            
+            // 关键：发送后重置输入框高度
+            autoResize(); 
 
             // 添加加载提示（临时）
             const loadingId = addMessage('AI正在思考中...', 'ai', true);
@@ -197,9 +249,13 @@
                 console.error('sendMessage error:', error);
             }
         }
+        
+        // 由于我们将 input 替换成了 textarea，并且移除了 handleKeyPress 的单独函数
+        // 我们需要把这个函数留在 global scope 供 <button onclick="sendMessage()"> 调用
+        window.sendMessage = sendMessage;
+
 
         function addMessage(content, type, isTemp = false) {
-            const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
             const messageId = isTemp ? 'temp-' + Date.now() : null;
 
@@ -216,6 +272,10 @@
             const element = document.getElementById(id);
             if (element) element.remove();
         }
+
+        // =========================================================
+        // 原有功能 - 复制对话、结束对话
+        // =========================================================
 
         // 复制对话（优先从 conversationHistory 构造）
         function copyChat() {
@@ -241,21 +301,25 @@
                 fallbackCopyText(fullText);
             }
         }
+        
+        // 必须将函数暴露给全局作用域，以便 HTML 元素的 onclick 调用
+        window.copyChat = copyChat;
+
 
         // fallback 方法（创建 textarea）
         function fallbackCopyText(text) {
             try {
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
+                const tempTextarea = document.createElement('textarea');
+                tempTextarea.value = text;
                 // 避免页面滚动到 textarea
-                textarea.style.position = 'fixed';
-                textarea.style.left = '-9999px';
-                document.body.appendChild(textarea);
-                textarea.focus();
-                textarea.select();
+                tempTextarea.style.position = 'fixed';
+                tempTextarea.style.left = '-9999px';
+                document.body.appendChild(tempTextarea);
+                tempTextarea.focus();
+                tempTextarea.select();
 
                 const successful = document.execCommand('copy');
-                document.body.removeChild(textarea);
+                document.body.removeChild(tempTextarea);
                 if (successful) {
                     hasCopied = true;
                     showCopyNotice();
@@ -271,11 +335,9 @@
         function showCopyNotice() {
             const notice = document.getElementById('copyNotice');
             notice.style.display = 'inline';
+            notice.style.opacity = '1';
             // 可选：2.5秒后淡出提示
-            setTimeout(() => {
-                notice.style.opacity = '1';
-                // 留更长时间以便用户看到
-            }, 0);
+            // setTimeout(() => { notice.style.opacity = '0'; }, 2500); 
         }
 
         // 结束对话并返回问卷：如果未复制则阻止并提示
@@ -294,12 +356,13 @@
             if (document.referrer && document.referrer.includes('您的问卷域名')) {
                 window.location.href = document.referrer;
             } else {
-                // 你也可以在这里直接跳转到一个指定的问卷 URL，例如：
-                // window.location.href = 'https://your-survey-domain.com/return-page';
                 // 暂时尝试关闭窗口（注意：window.close 在多数浏览器中只有在窗口由脚本打开时才有效）
                 window.close();
             }
         }
+        
+        // 必须将函数暴露给全局作用域，以便 HTML 元素的 onclick 调用
+        window.finishChat = finishChat;
 
         // 在用户尝试关闭或刷新页面时，提醒未复制的用户（可选的额外保护）
         window.addEventListener('beforeunload', function (e) {
@@ -314,5 +377,3 @@
     </script>
 </body>
 </html>
-
-
