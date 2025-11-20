@@ -20,15 +20,17 @@
             display: flex;
             flex-direction: column;
         }
+        /* =========== 聊天框滚动关键样式（已在原代码中，无需修改） =========== */
         .messages {
-            height: 400px;
-            overflow-y: auto;
+            height: 400px; /* 固定的高度，让内容可以超出 */
+            overflow-y: auto; /* **当内容超出高度时，显示垂直滚动条** */
             border: 1px solid #ddd;
             padding: 15px;
             margin-bottom: 15px;
             border-radius: 5px;
             background: #fff;
         }
+        /* ================================================================= */
         .message {
             margin: 10px 0;
             padding: 10px;
@@ -166,12 +168,6 @@
             
             // 应用新高度
             userInput.style.height = newHeight + 'px';
-
-            // 调整发送按钮的 margin-top 确保垂直对齐（可选，如果 CSS 布局未完全解决）
-            // const sendButton = userInput.nextElementSibling;
-            // if (sendButton) {
-            //     sendButton.style.marginTop = (userInput.offsetHeight - sendButton.offsetHeight) / 2 + 'px';
-            // }
         }
 
         // =========================================================
@@ -264,6 +260,7 @@
             if (messageId) messageDiv.id = messageId;
 
             messagesDiv.appendChild(messageDiv);
+            // **关键：每发送一条新消息，自动滚动到底部**
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
             return messageId;
         }
